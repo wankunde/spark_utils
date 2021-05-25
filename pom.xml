@@ -80,4 +80,13 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <profile>
+      <id>ebay-spark</id>
+      <properties>
+        <spark.version>3.0.0</spark.version>
+      </properties>
+    </profile>
+  </profiles>
 </project>
