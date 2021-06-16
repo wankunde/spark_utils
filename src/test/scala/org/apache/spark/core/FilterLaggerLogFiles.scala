@@ -14,7 +14,7 @@ import scala.io.Source
  * bin/spark-submit --master local --class org.apache.spark.core.EventLogReader ~/.m2/repository/com/wankun/spark_utils/1.0/spark_utils-1.0.jar  [fileName]
  * </pre>
  */
-object EventLogReader {
+object FilterLaggerLogFiles {
 
   def main(args: Array[String]): Unit = {
     val path = new Path(args(0))
