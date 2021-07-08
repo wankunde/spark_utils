@@ -1,4 +1,4 @@
-package org.apache.spark.deploy.history
+package org.apache.spark.loganalyze
 
 import scala.collection.mutable
 

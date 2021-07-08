@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.history
+package org.apache.spark.loganalyze
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{LongWritable, Text}
@@ -33,26 +33,25 @@ import org.json4s.jackson.JsonMethods.parse
 
 /**
  * <pre>
- *mv ./conf/metrics.properties ./conf/metrics.properties_bak
- *mv ./conf/log4j.properties ./conf/log4j.properties_bak
+ * mv ./conf/metrics.properties ./conf/metrics.properties_bak
  *
- *bin/spark-submit --master yarn --driver-memory 1G \
- *--executor-memory 4G \
- *--class org.apache.spark.deploy.history.SearchJoinPattern \
- *--conf spark.driver.memoryOverhead=0 \
- *--conf spark.driver.extraJavaOptions="" \
- *--conf spark.memory.offHeap.enabled=false \
- *--conf spark.memory.offHeap.size=0 \
- *--conf spark.executor.cores=4 \
- *--conf spark.executor.instances=30 \
- *--conf spark.executor.memory=2g \
- *--conf spark.executor.extraJavaOptions="" \
- *--conf spark.executor.memoryOverhead=0 \
- *--conf spark.yarn.queue=hdmi-kudu \
- *~/wakun/spark_utils-1.0.jar
+ * bin/spark-submit --master yarn --driver-memory 1G \
+ * --executor-memory 4G \
+ * --class org.apache.spark.deploy.history.SearchJoinPattern \
+ * --conf spark.driver.memoryOverhead=0 \
+ * --conf spark.driver.extraJavaOptions="" \
+ * --conf spark.memory.offHeap.enabled=false \
+ * --conf spark.memory.offHeap.size=0 \
+ * --conf spark.executor.cores=4 \
+ * --conf spark.executor.instances=30 \
+ * --conf spark.executor.memory=2g \
+ * --conf spark.executor.extraJavaOptions="" \
+ * --conf spark.executor.memoryOverhead=0 \
+ * --conf spark.yarn.queue=hdmi-kudu \
+ * ~/wakun/spark_utils-1.0.jar
  *
  * 查看执行结果: yarn logs -applicationId  application_1622159252184_9981 | more
- *   </pre>
+ * </pre>
  */
 object SearchJoinPatternNewApi extends Logging {
 
@@ -63,8 +62,6 @@ object SearchJoinPatternNewApi extends Logging {
       .getOrCreate()
     val sc = spark.sparkContext
     val sparkConf = sc.conf
-
-    import org.apache.spark.deploy.history.EventLogUtils._
 
     val util = SparkHadoopUtil.get
     //!!! Be careful, not HISTORY_LOG_DIR parameter
@@ -123,6 +120,7 @@ object SearchJoinPatternNewApi extends Logging {
 
   /**
    * must return a node
+   *
    * @param node
    * @return
    */

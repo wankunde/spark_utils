@@ -15,32 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.history
+package org.apache.spark.loganalyze
 
 import org.apache.spark.sql.execution.SparkPlanInfo
 
 object SearchJoinPatternUtils {
 
-  def parsePlanInfo(plan: SparkPlanInfo, appId: String, insertName: String): Unit = {
-    var parsedInsertName = insertName
+  def parsePlanInfo(plan: SparkPlanInfo, appId: String): Unit = {
     val nodeName = plan.nodeName
     if (nodeName.contains("InsertIntoHadoopFsRelationCommand") ||
       nodeName.contains("OptimizedCreateHiveTableAsSelectCommand")) {
       val simpleString = plan.simpleString
-      parsedInsertName = simpleString //.substring(0, simpleString.indexOf("CatalogTable"))
     }
     if (nodeName == "SortMergeJoin") {
       matchJoinPattern(firstExchange(plan.children(0)), firstExchange(plan.children(1))) match {
         case Some((left, right)) =>
-          println(s"Find pattern join in appId: $appId, insertName = $parsedInsertName")
+          println(s"Find pattern join in appId: $appId")
         case _ =>
       }
     }
-    plan.children.map(parsePlanInfo(_, appId, parsedInsertName))
+    plan.children.map(parsePlanInfo(_, appId))
   }
 
   /**
    * must return a node
+   *
    * @param node
    * @return
    */

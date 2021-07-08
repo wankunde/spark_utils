@@ -1,4 +1,4 @@
-package org.apache.spark.deploy.history
+package org.apache.spark.loganalyze
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{LongWritable, Text}
@@ -14,7 +14,7 @@ import org.json4s.jackson.JsonMethods.parse
 import scala.collection.mutable
 
 /**
- * bin/spark-submit --master yarn --driver-memory 1G --executor-memory 1G --num-executors 2 --class org.apache.spark.deploy.history.OfflineTuning ~/.m2/repository/com/wankun/spark_utils/1.0/spark_utils-1.0.jar
+ * bin/spark-submit --master yarn --driver-memory 1G --executor-memory 1G --num-executors 2 --class org.apache.spark.loganalyze.OfflineTuning ~/.m2/repository/com/wankun/spark_utils/1.0/spark_utils-1.0.jar
  */
 object OfflineTuning extends Logging {
 
@@ -29,8 +29,6 @@ object OfflineTuning extends Logging {
     val smallLimit = sparkConf.getLong("spark.tuning.mergeInsert.avgSmallSize", 15 * 1024 * 1024)
     val mergeLimit = sparkConf.getLong("spark.tuning.mergeInsert.avgTargetSize", 128 * 1024 * 1024)
     val compactFactor = sparkConf.getLong("spark.tuning.mergeInsert.mergeFactor", 2)
-
-    import org.apache.spark.deploy.history.EventLogUtils._
 
     val util = SparkHadoopUtil.get
     //!!! Be careful, not HISTORY_LOG_DIR parameter

@@ -1,13 +1,14 @@
-package org.apache.spark.deploy.history
+package org.apache.spark
 
-object EventLogUtils {
+package object loganalyze {
 
   implicit class JsonEventLog(event: String) {
     val pattern = s"""\\{"Event":"(.*?)"[\\s\\S]*""".r
     val pattern(eventType) = event
 
-    def checkEventType(eventTypes: Set[String]): Boolean =
-      eventTypes.contains(eventType)
+    def checkEventType(eventTypes: Set[String]): Boolean = {
+      eventTypes.isEmpty || eventTypes.contains(eventType)
+    }
   }
 
   val skippedEventType: Set[String] =
