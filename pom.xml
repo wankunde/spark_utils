@@ -9,14 +9,17 @@
   <version>1.0</version>
 
   <properties>
-    <maven.compiler.source>8</maven.compiler.source>
-    <maven.compiler.target>8</maven.compiler.target>
-    <maven.compiler.encoding>UTF-8</maven.compiler.encoding>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <scala.version>2.12.10</scala.version>
+    <java.version>1.8</java.version>
+    <maven.compiler.source>${java.version}</maven.compiler.source>
+    <maven.compiler.target>${java.version}</maven.compiler.target>
+    <maven.compiler.encoding>UTF-8</maven.compiler.encoding>
+    <scala.version>2.12.13</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
     <spark.version>3.1.1</spark.version>
+
+    <CodeCacheSize>1g</CodeCacheSize>
   </properties>
 
   <repositories>
@@ -67,43 +70,69 @@
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.8.1</version>
         <configuration>
-          <source>1.8</source>
-          <target>1.8</target>
-          <compilerArgs>
-            <arg>-Xlint:deprecation</arg>
-            <arg>-Xlint:unchecked</arg>
-          </compilerArgs>
+          <source>${java.version}</source>
+          <target>${java.version}</target>
+          <skipMain>true</skipMain> <!-- skip compile -->
+          <skip>true</skip> <!-- skip testCompile -->
         </configuration>
       </plugin>
 
       <plugin>
-        <groupId>org.scala-tools</groupId>
-        <artifactId>maven-scala-plugin</artifactId>
-        <version>${scala.binary.version}</version>
+        <groupId>net.alchim31.maven</groupId>
+        <artifactId>scala-maven-plugin</artifactId>
+        <version>4.3.0</version>
         <executions>
           <execution>
-            <id>compile</id>
+            <id>eclipse-add-source</id>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>scala-compile-first</id>
             <goals>
               <goal>compile</goal>
             </goals>
-            <phase>compile</phase>
           </execution>
           <execution>
-            <id>test-compile</id>
+            <id>scala-test-compile-first</id>
             <goals>
               <goal>testCompile</goal>
             </goals>
-            <phase>test-compile</phase>
           </execution>
           <execution>
-            <phase>process-resources</phase>
+            <id>attach-scaladocs</id>
+            <phase>verify</phase>
             <goals>
-              <goal>compile</goal>
+              <goal>doc-jar</goal>
             </goals>
           </execution>
         </executions>
         <configuration>
           <scalaVersion>${scala.version}</scalaVersion>
+          <checkMultipleScalaVersions>true</checkMultipleScalaVersions>
+          <failOnMultipleScalaVersions>true</failOnMultipleScalaVersions>
+          <recompileMode>incremental</recompileMode>
+          <useZincServer>true</useZincServer>
+          <args>
+            <arg>-unchecked</arg>
+            <arg>-deprecation</arg>
+            <arg>-feature</arg>
+            <arg>-explaintypes</arg>
+            <arg>-target:jvm-1.8</arg>
+          </args>
+          <jvmArgs>
+            <jvmArg>-Xms1024m</jvmArg>
+            <jvmArg>-Xmx1024m</jvmArg>
+            <jvmArg>-XX:ReservedCodeCacheSize=${CodeCacheSize}</jvmArg>
+          </jvmArgs>
+          <javacArgs>
+            <javacArg>-source</javacArg>
+            <javacArg>${java.version}</javacArg>
+            <javacArg>-target</javacArg>
+            <javacArg>${java.version}</javacArg>
+            <javacArg>-Xlint:all,-serial,-path,-try</javacArg>
+          </javacArgs>
         </configuration>
       </plugin>
       <!-- Build test-jar's for all projects, since some projects depend on tests from others -->

@@ -31,7 +31,7 @@ class JDBCUtilsSuite extends AnyFunSuite with BeforeAndAfter {
       conn.prepareStatement("insert into people values ('mary', 2)").executeUpdate()
       val rs = conn.prepareStatement("select count(1) from people").executeQuery()
       if (rs.next()) {
-        assert(rs.getInt(1) === 2)
+        assert(rs.getInt(1) == 2)
       }
     }
   }
