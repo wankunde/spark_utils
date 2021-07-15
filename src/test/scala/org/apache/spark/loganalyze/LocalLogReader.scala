@@ -17,44 +17,35 @@
 
 package org.apache.spark.loganalyze
 
-import org.apache.spark.scheduler.SparkListenerApplicationStart
-import org.apache.spark.sql.execution.SparkPlanInfo
-import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLExecutionStart}
+import org.apache.spark.loganalyze.AnalyzeBase.sqlProperties
+import org.apache.spark.loganalyze.SearchJoinPattern.{firstExchange, matchJoinPattern}
+import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 
 object LocalLogReader extends AnalyzeBase {
 
   def main(args: Array[String]): Unit = {
     localAnalyze(
-      filePath = args(0),
+      filePath = "/Users/wakun/Downloads/application_1624904512119_5728_1_9cd0ba48-910e-41fe-957e-2dc600e68d60.lz4",
       filteredEventTypes = commonFilteredEventTypes,
       func = {
-        case (_, e: SparkListenerApplicationStart) if e.appId.isDefined =>
-          appId = e.appId.get
-          appAttemptId = e.appAttemptId.getOrElse("")
-
-        case (_, e: SparkListenerSQLExecutionStart) =>
-          sqlMapping(e.executionId) = e.description
-
-        case (_, e: SparkListenerSQLAdaptiveExecutionUpdate) =>
-          executionId = e.executionId
-          findJoinWithPartitionRecombination(e.sparkPlanInfo)
-      }
-    )
-
-  }
-
-  def findJoinWithPartitionRecombination(planInfo: SparkPlanInfo): Unit = {
-    val nodeString = planInfo.simpleString
-    if (nodeString.startsWith("SortMergeJoin")) {
-      assert(planInfo.children.length == 2, "Join node should has two children")
-      val (left, right) = (planInfo.children(0), planInfo.children(1))
-      if ((nodeString.contains("LeftOuter") && left.nodeName == "PartitionRecombination") ||
-        (nodeString.contains("RightOuter") && right.nodeName == "PartitionRecombination")) {
-        resultDataset += (sqlMapping.getOrElse(executionId, ""))
-        println(sqlMapping.getOrElse(executionId, ""))
-        println(s"$viewpointUrl/$appId/$appAttemptId/SQL/execution/?id=$executionId")
-      }
-    }
-    planInfo.children.foreach(findJoinWithPartitionRecombination)
+        // if e.sparkPlanInfo.simpleString == "AdaptiveSparkPlan isFinalPlan=true"
+        case (json, e: SparkListenerSQLAdaptiveExecutionUpdate) =>
+          sqlProperties.get.executionId = e.executionId
+          transformPlanInfo(e.sparkPlanInfo, plan => {
+            if (plan.nodeName == "SortMergeJoin") {
+              matchJoinPattern(firstExchange(plan.children(0)), firstExchange(plan.children(1))) match {
+                case Some((left, right)) =>
+                  println(
+                    s"""__BLOCKSTART__URL
+                       |${sqlProperties.get.viewPointURL}
+                       |__BLOCKEND__URL
+                       |__BLOCKSTART__SQL
+                       |${sqlProperties.get.sql}
+                       |__BLOCKEND__SQL""".stripMargin)
+                case _ =>
+              }
+            }
+          })
+      })
   }
 }

@@ -18,17 +18,12 @@
 package org.apache.spark.loganalyze
 
 /**
+ * Abort spark job if AnalyzeException is found
  *
+ * @param message
+ * @param cause
  */
-object CatLog extends AnalyzeBase {
-  def main(args: Array[String]): Unit = {
-    localAnalyze(
-      filePath = "/Users/wakun/Downloads/application_1624904512119_5728_1_9cd0ba48-910e-41fe-957e-2dc600e68d60.lz4",
-      filteredEventTypes = Set.empty[String],
-      func = {
-        case (json, _) =>
-          println(json)
-      }
-    )
-  }
+class AnalyzeException(message: String, cause: Throwable)
+  extends Exception(message, cause) {
+  def this(message: String) = this(message, null)
 }

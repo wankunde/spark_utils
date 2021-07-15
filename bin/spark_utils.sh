@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-#set -x
 BASEDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd .. && pwd )"
 . "${BASEDIR}/bin/env.sh"
 
@@ -75,11 +74,17 @@ elif [ "${CMD}" == "custom_class" ]; then
      --conf spark.memory.offHeap.size=0 \
      --conf spark.executor.cores=4 \
      --conf spark.executor.instances=180 \
-     --conf spark.executor.memory=4g \
+     --conf spark.executor.memory=8g \
      --conf spark.executor.extraJavaOptions="" \
      --conf spark.executor.memoryOverhead=0 \
      --conf spark.yarn.queue=hdmi-staging \
-    ${BASEDIR}/libs/spark_utils-1.0.jar ${file_name}
+    ${BASEDIR}/libs/spark_utils-1.0.jar
+elif [ "${CMD}" == "collect_result" ]; then
+  applicationId=$1
+  echo "Run command: spark_utils.sh applicationId ${applicationId}"
+  yarn logs -applicationId $applicationId -log_files_pattern stdout | grep -vE 'End of LogType:stdout|^$' | grep -v "\*\*\*" > /tmp/AnalyzeBase.log
+  export CLASSPATH=$(echo ${SPARK_HOME}/jars/*.jar | tr ' ' ':'):${BASEDIR}/libs/spark_utils-1.0.jar:${CLASSPATH}
+  exec java org.apache.spark.loganalyze.UniqQuery > analyze.log
 else
   print_usage
 fi

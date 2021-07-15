@@ -17,9 +17,8 @@
 
 package org.apache.spark.loganalyze
 
-import org.apache.spark.scheduler.SparkListenerApplicationStart
-import org.apache.spark.sql.execution.SparkPlanInfo
-import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLExecutionStart}
+import org.apache.spark.loganalyze.AnalyzeBase.sqlProperties
+import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 
 /**
  * rm -rf spark_utils*
@@ -36,31 +35,22 @@ object PartitionRecombinationPattern extends AnalyzeBase {
       appName = "PartitionRecombination Pattern Search",
       filteredEventTypes = commonFilteredEventTypes,
       func = {
-        case (_, e: SparkListenerApplicationStart) if e.appId.isDefined =>
-          appId = e.appId.get
-          appAttemptId = e.appAttemptId.getOrElse("")
-
-        case (_, e: SparkListenerSQLExecutionStart) =>
-          sqlMapping(e.executionId) = e.description
-
         case (_, e: SparkListenerSQLAdaptiveExecutionUpdate) =>
-          executionId = e.executionId
-          findJoinWithPartitionRecombination(e.sparkPlanInfo)
+          sqlProperties.get.executionId = e.executionId
+          transformPlanInfo(e.sparkPlanInfo, planInfo => {
+            val nodeString = planInfo.simpleString
+            if (nodeString.startsWith("SortMergeJoin")) {
+              assert(planInfo.children.length >= 2, "Join node should has two children")
+              val (left, right) = (planInfo.children(0), planInfo.children(1))
+              if ((nodeString.contains("LeftOuter") && left.nodeName == "PartitionRecombination") ||
+                (nodeString.contains("RightOuter") && right.nodeName == "PartitionRecombination")) {
+                println(
+                  s"""${sqlProperties.get.sql}
+                     |${sqlProperties.get.viewPointURL}
+                     |""".stripMargin)
+              }
+            }
+          })
       })
-  }
-
-  def findJoinWithPartitionRecombination(planInfo: SparkPlanInfo): Unit = {
-    val nodeString = planInfo.simpleString
-    if (nodeString.startsWith("SortMergeJoin")) {
-      assert(planInfo.children.length >= 2, "Join node should has two children")
-      val (left, right) = (planInfo.children(0), planInfo.children(1))
-      if ((nodeString.contains("LeftOuter") && left.nodeName == "PartitionRecombination") ||
-        (nodeString.contains("RightOuter") && right.nodeName == "PartitionRecombination")) {
-        resultDataset += (sqlMapping.getOrElse(executionId, ""))
-        println(sqlMapping.getOrElse(executionId, ""))
-        println(s"$viewpointUrl/$appId/$appAttemptId/SQL/execution/?id=$executionId")
-      }
-    }
-    planInfo.children.foreach(findJoinWithPartitionRecombination)
   }
 }

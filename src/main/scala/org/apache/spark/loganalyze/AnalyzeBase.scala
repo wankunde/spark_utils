@@ -17,31 +17,28 @@
 
 package org.apache.spark.loganalyze
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.io.{LongWritable, Text}
-import org.apache.hadoop.mapred.EventLogInputFormat
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.history.EventLogFileReader
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.EVENT_LOG_DIR
-import org.apache.spark.scheduler.SparkListenerEvent
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.util.{JsonProtocol, Utils}
-import org.json4s.jackson.JsonMethods.parse
-
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.util.control.NonFatal
 
-trait AnalyzeBase extends Logging with Serializable {
-  var appId: String = ""
-  var executionId: Long = 0
-  var appAttemptId: String = ""
-  var sqlMapping = mutable.Map[Long, String]()
-  val resultDataset = ArrayBuffer[Any]()
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.io.{LongWritable, Text}
+import org.apache.hadoop.mapred.EventLogInputFormat
+import org.json4s.jackson.JsonMethods.parse
 
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.history.EventLogFileReader
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.EVENT_LOG_DIR
+import org.apache.spark.loganalyze.AnalyzeBase.sqlProperties
+import org.apache.spark.loganalyze.PartitionRecombinationPattern.viewpointUrl
+import org.apache.spark.scheduler.{SparkListenerApplicationStart, SparkListenerEvent}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.ui.{SparkListenerDriverAccumUpdates, SparkListenerSQLExecutionStart}
+import org.apache.spark.util.{JsonProtocol, Utils}
+
+trait AnalyzeBase extends Logging with Serializable {
   var logdays = 7 // 默认搜索线上7天的任务日志
 
   val viewpointUrl = "http://viewpoint.hermes-prod.svc.25.tess.io/history"
@@ -49,6 +46,7 @@ trait AnalyzeBase extends Logging with Serializable {
   val commonFilteredEventTypes = Set(
     "SparkListenerApplicationStart",
     "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart",
+    "org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates",
     "org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate"
   )
 
@@ -83,15 +81,28 @@ trait AnalyzeBase extends Logging with Serializable {
         .map(_._2.toString)
         .filter(_.checkEventType(filteredEventTypes))
         .foreachPartition { partitionIterator: Iterator[String] =>
+          val jsonAndEvent = new ArrayBuffer[(String, SparkListenerEvent)]()
           partitionIterator.foreach { json =>
-            try {
-              val event = JsonProtocol.sparkEventFromJson(parse(json))
-              func(json, event)
-            } catch {
-              case e: Exception =>
-                logError(s"Fail to parse log appId = ${appId} log = ${json.substring(0, 100)}", e)
+            val event: SparkListenerEvent = JsonProtocol.sparkEventFromJson(parse(json))
+            if (event.isInstanceOf[SparkListenerDriverAccumUpdates]) {
+              sqlProperties.get.accumUpdates ++= event.asInstanceOf[SparkListenerDriverAccumUpdates].accumUpdates.toMap
+            }
+            jsonAndEvent += Tuple2(json, event: SparkListenerEvent)
+          }
+
+          catchAnalyzeException {
+            jsonAndEvent.collect {
+              case (_, e: SparkListenerApplicationStart) =>
+                sqlProperties.get.appId = e.appId.get
+                sqlProperties.get.appAttemptId = e.appAttemptId.getOrElse("")
+
+              case (_, e: SparkListenerSQLExecutionStart) =>
+                sqlProperties.get.sql = e.description
+
+              case (json, event) if func.isDefinedAt(json, event) => func(json, event)
             }
           }
+          sqlProperties.remove()
         }
     })
 
@@ -114,16 +125,63 @@ trait AnalyzeBase extends Logging with Serializable {
         Source.fromInputStream(in).getLines()
           .filter(_.checkEventType(filteredEventTypes))
           .toList
-
-      lines.foreach(json => {
-        try {
+      val jsonAndEvent =
+        lines.map(json => {
           val event = JsonProtocol.sparkEventFromJson(parse(json))
-          func(json, event)
-        } catch {
-          // ignore any exception occurred from unidentified json
-          case NonFatal(_) =>
+          if (event.isInstanceOf[SparkListenerDriverAccumUpdates]) {
+            sqlProperties.get.accumUpdates ++= event.asInstanceOf[SparkListenerDriverAccumUpdates].accumUpdates.toMap
+          }
+          (json, event)
+        })
+
+      catchAnalyzeException {
+        jsonAndEvent.collect {
+          case (_, e: SparkListenerApplicationStart) =>
+            sqlProperties.get.appId = e.appId.get
+            sqlProperties.get.appAttemptId = e.appAttemptId.getOrElse("")
+
+          case (_, e: SparkListenerSQLExecutionStart) =>
+            sqlProperties.get.sql = e.description
+
+          case (json, event) if func.isDefinedAt(json, event) => func(json, event)
         }
-      })
+      }
+      sqlProperties.remove()
     }
   }
+
+  def catchAnalyzeException(body: => Any): Any = {
+    try {
+      body
+    } catch {
+      case e: AnalyzeException =>
+        throw e
+
+      // ignore any exception occurred from unidentified json
+      case NonFatal(p) =>
+        throw p
+
+    }
+  }
+}
+
+object AnalyzeBase {
+  val sqlProperties: ThreadLocal[SQLProperties] = new ThreadLocal[SQLProperties]() {
+    override def initialValue() = SQLProperties()
+
+
+  }
+}
+
+case class SQLProperties(var appId: String = "",
+                         var executionId: Long = 0,
+                         var appAttemptId: String = "",
+                         var sql: String = "",
+                         var accumUpdates: Map[Long, Long] = Map[Long, Long]()) {
+  def viewPointURL(): String =
+    s"$viewpointUrl/$appId/$appAttemptId/SQL/execution/?id=$executionId"
+
+  def getMetricById(id: Long): Long =
+    accumUpdates.getOrElse(id, -1)
+//  throw new AnalyzeException(s"Not found metric $id")
 }
