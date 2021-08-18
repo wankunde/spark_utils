@@ -1,6 +1,7 @@
 package org.apache.spark
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.SparkPlanInfo
@@ -16,20 +17,20 @@ package object loganalyze extends Logging {
     }
   }
 
-  val skippedEventType: Set[String] =
-    Set("SparkListenerLogStart",
-      "SparkListenerApplicationStart",
-      "SparkListenerApplicationEnd",
-      "org.apache.spark.scheduler.SparkListenerMiscellaneousProcessAdded",
-      "SparkListenerResourceProfileAdded",
-      "SparkListenerBlockManagerAdded",
-      "SparkListenerEnvironmentUpdate",
-      "SparkListenerExecutorAdded",
-      // TODO: Stage事件后续可用于DAG Schedule 资源调度优化
-      "SparkListenerStageSubmitted",
-      "SparkListenerStageCompleted",
-      "SparkListenerTaskStart",
-      "SparkListenerTaskEnd")
+  implicit class SparkPlanInfoTransform(plan: SparkPlanInfo) {
+    val buffer = ArrayBuffer[SparkPlanInfo]()
+
+    def collectNode(func: PartialFunction[SparkPlanInfo, SparkPlanInfo]): Seq[SparkPlanInfo] = {
+      buffer.clear()
+      transformPlanInfo(plan, plan => {
+        if (func.isDefinedAt(plan)) {
+          buffer += func(plan)
+        }
+      })
+      buffer
+    }
+  }
+
 
   implicit def planToQueue(plan: SparkPlanInfo): mutable.Queue[SparkPlanInfo] = mutable.Queue[SparkPlanInfo](plan)
 
@@ -58,7 +59,7 @@ package object loganalyze extends Logging {
       while (i > 0 && nodeName(i) != ',') {
         i = i - 1
       }
-      nodeName.substring(i+1, j).trim.toLong
+      nodeName.substring(i + 1, j).trim.toLong
     } catch {
       case e: Exception =>
         logError(s"Failed to parse HashPartitioning ${nodeName}")

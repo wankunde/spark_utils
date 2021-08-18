@@ -32,7 +32,6 @@ object UniqQuery {
 
     val file = Source.fromFile("/tmp/AnalyzeBase.log")
     var inBlock = false
-    var readURL = false
     var sql = ""
     var url = ""
     val sqlAndURL = mutable.Map[String, String]()

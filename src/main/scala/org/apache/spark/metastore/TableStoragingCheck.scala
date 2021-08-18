@@ -15,9 +15,33 @@
  * limitations under the License.
  */
 
-package org.apache.spark.loganalyze
+package org.apache.spark.metastore
 
-case class InsertRelationExecutionData(executionId: Long,
-                                       description: String,
-                                       simpleString: String,
-                                       metrics: OperationMetrics)
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SparkSession
+
+object TableStorageDiretoryCheck extends Logging {
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession
+      .builder
+      .appName("Table storage directory Check")
+      .getOrCreate()
+
+    val sc = spark.sparkContext
+    val catalog = spark.sessionState.catalog
+    val databases = catalog.listDatabases()
+    println(s"Database number: ${databases.size}")
+    databases.foreach { database =>
+      val tables = catalog.listTables(database)
+      tables.foreach { table =>
+        val catalogTable = catalog.getTableMetadata(table)
+
+        catalogTable.storage
+      }
+
+      tables
+
+    }
+
+  }
+}

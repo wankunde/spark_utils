@@ -17,7 +17,6 @@
 
 package org.apache.spark.loganalyze
 
-import org.apache.spark.loganalyze.AnalyzeBase.sqlProperties
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 
@@ -35,17 +34,16 @@ object SearchJoinPattern extends AnalyzeBase {
       filteredEventTypes = commonFilteredEventTypes,
       func = {
         case (_, e: SparkListenerSQLAdaptiveExecutionUpdate) =>
-          sqlProperties.get.executionId = e.executionId
           transformPlanInfo(e.sparkPlanInfo, plan => {
             if (plan.nodeName == "SortMergeJoin") {
               matchJoinPattern(firstExchange(plan.children(0)), firstExchange(plan.children(1))) match {
                 case Some((left, right)) =>
                   println(
                     s"""__BLOCKSTART__URL
-                       |${sqlProperties.get.viewPointURL}
+                       |${viewPointURL(e.executionId)}
                        |__BLOCKEND__URL
                        |__BLOCKSTART__SQL
-                       |${sqlProperties.get.sql}
+                       |${sql(e.executionId)}
                        |__BLOCKEND__SQL
                        |""".stripMargin)
                 case _ =>
@@ -67,13 +65,13 @@ object SearchJoinPattern extends AnalyzeBase {
     } else if (node.nodeName == "CustomShuffleReader") {
       val coalesceNumberOpt =
         node.metrics.filter(_.name == "number of partitions")
-          .collectFirst { case m => sqlProperties.get.getMetricById(m.accumulatorId) }
+          .collectFirst { case m => metric(m.accumulatorId) }
       val partitionNumOpt = hashPartitionNumberOpt(node)
       if(coalesceNumberOpt.isDefined && coalesceNumberOpt.get == -1) {
-        println(s"Becareful with ${node.simpleString} in ${sqlProperties.get.viewPointURL}, no coalesce number!")
+        println(s"Becareful with ${node.simpleString} in ${viewPointURL()}, no coalesce number!")
       }
       if(partitionNumOpt.isDefined && partitionNumOpt.get ==0) {
-        println(s"Becareful with ${node.simpleString} in ${sqlProperties.get.viewPointURL}, no hash partition number")
+        println(s"Becareful with ${node.simpleString} in ${viewPointURL()}, no hash partition number")
       }
       if (partitionNumOpt.isDefined && coalesceNumberOpt.isDefined &&
         partitionNumOpt.get != coalesceNumberOpt.get) {

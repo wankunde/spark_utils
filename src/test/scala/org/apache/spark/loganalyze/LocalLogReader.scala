@@ -17,7 +17,6 @@
 
 package org.apache.spark.loganalyze
 
-import org.apache.spark.loganalyze.AnalyzeBase.sqlProperties
 import org.apache.spark.loganalyze.SearchJoinPattern.{firstExchange, matchJoinPattern}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 
@@ -30,17 +29,16 @@ object LocalLogReader extends AnalyzeBase {
       func = {
         // if e.sparkPlanInfo.simpleString == "AdaptiveSparkPlan isFinalPlan=true"
         case (json, e: SparkListenerSQLAdaptiveExecutionUpdate) =>
-          sqlProperties.get.executionId = e.executionId
           transformPlanInfo(e.sparkPlanInfo, plan => {
             if (plan.nodeName == "SortMergeJoin") {
               matchJoinPattern(firstExchange(plan.children(0)), firstExchange(plan.children(1))) match {
                 case Some((left, right)) =>
                   println(
                     s"""__BLOCKSTART__URL
-                       |${sqlProperties.get.viewPointURL}
+                       |${viewPointURL()}
                        |__BLOCKEND__URL
                        |__BLOCKSTART__SQL
-                       |${sqlProperties.get.sql}
+                       |${sql()}
                        |__BLOCKEND__SQL""".stripMargin)
                 case _ =>
               }

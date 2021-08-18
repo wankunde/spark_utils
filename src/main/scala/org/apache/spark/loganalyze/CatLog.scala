@@ -23,11 +23,12 @@ package org.apache.spark.loganalyze
 object CatLog extends AnalyzeBase {
   def main(args: Array[String]): Unit = {
     localAnalyze(
-      filePath = "/Users/wakun/Downloads/application_1624904512119_5728_1_9cd0ba48-910e-41fe-957e-2dc600e68d60.lz4",
+      filePath = "/Users/wakun/Downloads/application_1627443888187_3898_1_b0f538a0-3038-4fa6-aa62-d97e8f57b5fb.lz4",
       filteredEventTypes = Set.empty[String],
       func = {
         case (json, _) =>
-          println(json)
+          if(json.contains("SparkListenerSQLExecution"))
+            println(json)
       }
     )
   }
