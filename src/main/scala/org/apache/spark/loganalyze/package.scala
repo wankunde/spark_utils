@@ -8,6 +8,21 @@ import org.apache.spark.sql.execution.SparkPlanInfo
 
 package object loganalyze extends Logging {
 
+  val viewpointUrl = "http://viewpoint.hermes-prod.svc.25.tess.io/history"
+
+
+  val commonFilteredEventTypes = Set(
+    // events for metrics
+    "SparkListenerStageCompleted",
+    "org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates",
+    //appId and appAttemptId
+    "SparkListenerApplicationStart",
+    // sql description and duration
+    "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart",
+    "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd",
+    // sql physical plan
+    "org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate")
+
   implicit class JsonEventLog(event: String) {
     val pattern = s"""\\{"Event":"(.*?)"[\\s\\S]*""".r
     val pattern(eventType) = event
@@ -31,10 +46,12 @@ package object loganalyze extends Logging {
     }
   }
 
+  implicit def planToQueue(plan: SparkPlanInfo): mutable.Queue[SparkPlanInfo] =
+    mutable.Queue[SparkPlanInfo](plan)
 
-  implicit def planToQueue(plan: SparkPlanInfo): mutable.Queue[SparkPlanInfo] = mutable.Queue[SparkPlanInfo](plan)
-
-  def transformPlanInfo(plans: mutable.Queue[SparkPlanInfo], func: SparkPlanInfo => Unit): Unit = {
+  def transformPlanInfo(
+      plans: mutable.Queue[SparkPlanInfo],
+      func: SparkPlanInfo => Unit): Unit = {
     while (!plans.isEmpty) {
       val plan = plans.dequeue()
       func(plan)

@@ -66,15 +66,31 @@ elif [ "${CMD}" == "custom_class" ]; then
   custom_class=$1
   echo "Run command: spark_utils.sh custom_class ${custom_class}"
   exec ${SPARK_HOME}/bin/spark-submit --master yarn --driver-memory 8G \
-     --executor-memory 4G \
+     --executor-memory 7G \
      --class ${custom_class} \
      --conf spark.driver.memoryOverhead=0 \
      --conf spark.driver.extraJavaOptions="" \
      --conf spark.memory.offHeap.enabled=false \
      --conf spark.memory.offHeap.size=0 \
-     --conf spark.executor.cores=4 \
+     --conf spark.executor.cores=5 \
      --conf spark.executor.instances=180 \
-     --conf spark.executor.memory=8g \
+     --conf spark.executor.memory=7g \
+     --conf spark.executor.extraJavaOptions="" \
+     --conf spark.executor.memoryOverhead=0 \
+     --conf spark.yarn.queue=hdmi-staging \
+    ${BASEDIR}/libs/spark_utils-1.0.jar
+elif [ "${CMD}" == "tpcds" ]; then
+  echo "Run command: spark_utils.sh tpcds"
+  exec ${SPARK_HOME}/bin/spark-submit --master yarn --driver-memory 8G \
+     --executor-memory 7G \
+     --class org.apache.spark.tpcds.CostBasedReorderTest \
+     --conf spark.driver.memoryOverhead=0 \
+     --conf spark.driver.extraJavaOptions="" \
+     --conf spark.memory.offHeap.enabled=false \
+     --conf spark.memory.offHeap.size=0 \
+     --conf spark.executor.cores=5 \
+     --conf spark.executor.instances=100 \
+     --conf spark.executor.memory=7g \
      --conf spark.executor.extraJavaOptions="" \
      --conf spark.executor.memoryOverhead=0 \
      --conf spark.yarn.queue=hdmi-staging \

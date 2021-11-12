@@ -17,6 +17,22 @@
 
 package org.apache.spark.loganalyze.cost
 
-class JoinCostAnalyzeSuite {
+import org.scalatest.BeforeAndAfter
+import org.scalatest.funsuite.AnyFunSuite
+
+import org.apache.spark.loganalyze.{AnalyzeBase, commonFilteredEventTypes}
+import org.apache.spark.loganalyze.cost.JoinCostAnalyze.func
+
+class JoinCostAnalyzeSuite extends AnyFunSuite with BeforeAndAfter {
+
+  test("test local log files") {
+    val a = new AnalyzeBase {}
+
+    a.localAnalyze(
+      filePath = "/Users/wakun/Downloads/application_1627443888187_3898_1_b0f538a0-3038-4fa6-aa62-d97e8f57b5fb.lz4",
+      filteredEventTypes = commonFilteredEventTypes,
+      func
+    )
+  }
 
 }

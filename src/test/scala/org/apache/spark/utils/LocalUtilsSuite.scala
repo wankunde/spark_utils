@@ -22,7 +22,7 @@ import org.scalatest.funsuite.AnyFunSuite
 
 import org.apache.spark.utils.LocalUtils._
 
-class JDBCUtilsSuite extends AnyFunSuite with BeforeAndAfter {
+class LocalUtilsSuite extends AnyFunSuite with BeforeAndAfter {
 
   test("sink data to jdbc table") {
     withConnection("h2") { conn =>

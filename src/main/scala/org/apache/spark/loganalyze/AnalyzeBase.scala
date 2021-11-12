@@ -17,6 +17,8 @@
 
 package org.apache.spark.loganalyze
 
+import java.io.{File, PrintWriter}
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
@@ -33,41 +35,37 @@ import org.apache.spark.deploy.history.EventLogFileReader
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.EVENT_LOG_DIR
 import org.apache.spark.loganalyze.AnalyzeBase._
-import org.apache.spark.scheduler.{AccumulableInfo, SparkListenerApplicationStart, SparkListenerEvent, SparkListenerStageCompleted}
+import org.apache.spark.scheduler.{
+  AccumulableInfo,
+  SparkListenerApplicationStart,
+  SparkListenerEvent,
+  SparkListenerStageCompleted
+}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.ui.{SparkListenerDriverAccumUpdates, SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
+import org.apache.spark.sql.execution.ui.{
+  SparkListenerDriverAccumUpdates,
+  SparkListenerSQLExecutionEnd,
+  SparkListenerSQLExecutionStart
+}
 import org.apache.spark.util.{JsonProtocol, Utils}
+import org.apache.spark.utils.LocalUtils.SPARK_APPLICATION_ID_PATH
 
 trait AnalyzeBase extends Logging with Serializable {
-  var logdays = 7 // 默认搜索线上7天的任务日志
 
-  val viewpointUrl = "http://viewpoint.hermes-prod.svc.25.tess.io/history"
-
-  val commonFilteredEventTypes = Set(
-    // events for metrics
-    "SparkListenerStageCompleted",
-    "org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates",
-
-    //appId and appAttemptId
-    "SparkListenerApplicationStart",
-
-    // sql description and duration
-    "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart",
-    "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd",
-
-    // sql physical plan
-    "org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate"
-  )
-
-  def sparkAnalyze(appName: String,
-                   filteredEventTypes: Set[String],
-                   func: PartialFunction[(String, SparkListenerEvent), Unit]): Unit = {
-    val spark = SparkSession
-      .builder
+  def sparkAnalyze(
+      appName: String,
+      filteredEventTypes: Set[String],
+      func: PartialFunction[(String, SparkListenerEvent), Unit],
+      logHours: Int = 7 * 24 // 默认搜索线上7天的任务日志
+  ): Unit = {
+    val spark = SparkSession.builder
       .appName(appName)
       .getOrCreate()
     val sc = spark.sparkContext
     val sparkConf = sc.conf
+    val printer = new PrintWriter(new File(SPARK_APPLICATION_ID_PATH))
+    printer.write(sc.applicationId)
+    printer.close()
 
     val util = SparkHadoopUtil.get
     //!!! Be careful, not HISTORY_LOG_DIR parameter
@@ -76,12 +74,14 @@ trait AnalyzeBase extends Logging with Serializable {
 
     val now = System.currentTimeMillis()
 
-    Range(0, logdays).foreach(dayBefore => {
-      val logFiles = util.listFilesSorted(fs, new Path(logDir), "application_", ".inprogress")
+    Range(0, logHours).foreach(hourBefore => {
+      val logFiles = util
+        .listFilesSorted(fs, new Path(logDir), "application_", ".inprogress")
         .filter(fileStatus => {
           val mtime = fileStatus.getModificationTime
-          mtime > (now - 86400000 * (dayBefore + 1)) && mtime < now - 86400000 * dayBefore
+          mtime > (now - 3600000 * (hourBefore + 1)) && mtime < now - 3600000 * hourBefore
         })
+        .filter(p => p.getPath.toString.contains("1636603355091_0597"))
         .map(_.getPath.toString)
 
       logInfo(s"Try to analyze ${logFiles.size} log files in ${logDir}")
@@ -89,81 +89,85 @@ trait AnalyzeBase extends Logging with Serializable {
       sc.hadoopFile[LongWritable, Text, EventLogInputFormat](logFiles.mkString(","))
         .map(_._2.toString)
         .filter(_.checkEventType(filteredEventTypes))
-        .foreachPartition { partitionIterator: Iterator[String] =>
-          try {
-            val jsonAndEvent = new ArrayBuffer[(String, SparkListenerEvent)]()
-            partitionIterator.foreach { json =>
-              try {
-                val event: SparkListenerEvent = JsonProtocol.sparkEventFromJson(parse(json))
-                event match {
-                  case e: SparkListenerDriverAccumUpdates =>
-                    accumUpdates.get() ++= e.accumUpdates.toMap
+        .foreachPartition {
+          partitionIterator: Iterator[String] =>
+            try {
+              val jsonAndEvent = new ArrayBuffer[(String, SparkListenerEvent)]()
+              partitionIterator.foreach {
+                json =>
+                  try {
+                    val event: SparkListenerEvent = JsonProtocol.sparkEventFromJson(parse(json))
+                    event match {
+                      case e: SparkListenerDriverAccumUpdates =>
+                        accumUpdates.get() ++= e.accumUpdates.toMap
 
-                  case e: SparkListenerStageCompleted =>
-                    accumUpdates.get() ++=
-                      e.stageInfo.accumulables.values.map {
-                        case acc: AccumulableInfo if acc.value.isDefined =>
-                          val value: Long = acc.value.get match {
-                            case l: Long => l
-                            case s: String =>
-                              // skip values which can not be parsed to long,
-                              // like "List([name: dw_checkout_trans_gdpr, prunedFiles: 9618, prunedRowGroups: 1282])"
-                              try {
-                                s.toLong
-                              } catch {
-                                case _ => 0
+                      case e: SparkListenerStageCompleted =>
+                        accumUpdates.get() ++=
+                          e.stageInfo.accumulables.values.map {
+                            case acc: AccumulableInfo if acc.value.isDefined =>
+                              val value: Long = acc.value.get match {
+                                case l: Long => l
+                                case s: String =>
+                                  // skip values which can not be parsed to long,
+                                  // like "List([name: dw_checkout_trans_gdpr, prunedFiles: 9618, prunedRowGroups: 1282])"
+                                  try {
+                                    s.toLong
+                                  } catch {
+                                    case _ => 0
+                                  }
                               }
-                          }
-                          acc.id -> value
-                      }.toMap
+                              acc.id -> value
+                          }.toMap
 
-                  case e: SparkListenerApplicationStart =>
-                    appId.set(e.appId.get)
-                    appAttemptId.set(e.appAttemptId.getOrElse(""))
+                      case e: SparkListenerApplicationStart =>
+                        appId.set(e.appId.get)
+                        appAttemptId.set(e.appAttemptId.getOrElse(""))
 
-                  case e: SparkListenerSQLExecutionStart =>
-                    val sqlProperty = SQLProperties()
-                    sqlProperty.startTime = e.time
-                    sqlProperty.sql = e.description
-                    sqlProperties.get += e.executionId -> sqlProperty
+                      case e: SparkListenerSQLExecutionStart =>
+                        val sqlProperty = SQLProperties()
+                        sqlProperty.startTime = e.time
+                        sqlProperty.sql = e.description
+                        sqlProperties.get += e.executionId -> sqlProperty
 
-                  case e: SparkListenerSQLExecutionEnd =>
-                    sqlProperty(e.executionId).endTime = e.time
+                      case e: SparkListenerSQLExecutionEnd =>
+                        sqlProperty(e.executionId).endTime = e.time
 
-                  case _ =>
+                      case _ =>
+                    }
+                    jsonAndEvent += Tuple2(json, event: SparkListenerEvent)
+                  } catch {
+                    case _ =>
+                  }
+              }
+
+              catchAnalyzeException {
+                jsonAndEvent.collect {
+                  case (_, e: SparkListenerSQLExecutionStart) =>
+                    executionIdOpt.set(e.executionId)
+
+                  case (_, e: SparkListenerSQLExecutionEnd) =>
+                    executionIdOpt.set(0L)
+
+                  case (json, event) if func.isDefinedAt(json, event) => func(json, event)
                 }
-                jsonAndEvent += Tuple2(json, event: SparkListenerEvent)
-              } catch {
-                case _ =>
               }
+            } catch {
+              case e: Exception =>
+                logError(s"Failed to analyze spark log. $e")
             }
 
-            catchAnalyzeException {
-              jsonAndEvent.collect {
-                case (_, e: SparkListenerSQLExecutionStart) =>
-                  executionIdOpt.set(e.executionId)
-
-                case (_, e: SparkListenerSQLExecutionEnd) =>
-                  executionIdOpt.set(0L)
-
-                case (json, event) if func.isDefinedAt(json, event) => func(json, event)
-              }
-            }
-          } catch {
-            case e: Exception =>
-              logError(s"Failed to analyze spark log. $e")
-          }
-
-          sqlProperties.remove()
+            sqlProperties.remove()
         }
     })
 
     spark.stop()
   }
 
-  def localAnalyze(filePath: String,
-                   filteredEventTypes: Set[String],
-                   func: PartialFunction[(String, SparkListenerEvent), Unit]): Unit = {
+  def localAnalyze(
+      filePath: String,
+      filteredEventTypes: Set[String],
+      func: PartialFunction[(String, SparkListenerEvent), Unit],
+      logHours: Int = -1): Unit = {
     val path = new Path(filePath)
     val fs = path.getFileSystem(new Configuration())
 
@@ -174,53 +178,56 @@ trait AnalyzeBase extends Logging with Serializable {
     println(s"========================================CONTENT START FOR ${path}")
     Utils.tryWithResource(EventLogFileReader.openEventLog(path, fs)) { in =>
       val lines =
-        Source.fromInputStream(in).getLines()
+        Source
+          .fromInputStream(in)
+          .getLines()
           .filter(_.checkEventType(filteredEventTypes))
           .toList
       val jsonAndEvent =
-        lines.flatMap(json => try {
-          val event = JsonProtocol.sparkEventFromJson(parse(json))
-          event match {
-            case e: SparkListenerDriverAccumUpdates =>
-              accumUpdates.get() ++= e.accumUpdates.toMap
+        lines.flatMap(json =>
+          try {
+            val event = JsonProtocol.sparkEventFromJson(parse(json))
+            event match {
+              case e: SparkListenerDriverAccumUpdates =>
+                accumUpdates.get() ++= e.accumUpdates.toMap
 
-            case e: SparkListenerStageCompleted =>
-              accumUpdates.get() ++=
-                e.stageInfo.accumulables.values.map {
-                  case acc: AccumulableInfo if acc.value.isDefined =>
-                    val value: Long = acc.value.get match {
-                      case l: Long => l
-                      case s: String =>
-                        // skip values which can not be parsed to long,
-                        // like "List([name: dw_checkout_trans_gdpr, prunedFiles: 9618, prunedRowGroups: 1282])"
-                        try {
-                          s.toLong
-                        } catch {
-                          case _ => 0
-                        }
-                    }
-                    acc.id -> value
-                }.toMap
+              case e: SparkListenerStageCompleted =>
+                accumUpdates.get() ++=
+                  e.stageInfo.accumulables.values.map {
+                    case acc: AccumulableInfo if acc.value.isDefined =>
+                      val value: Long = acc.value.get match {
+                        case l: Long => l
+                        case s: String =>
+                          // skip values which can not be parsed to long,
+                          // like "List([name: dw_checkout_trans_gdpr, prunedFiles: 9618, prunedRowGroups: 1282])"
+                          try {
+                            s.toLong
+                          } catch {
+                            case _ => 0
+                          }
+                      }
+                      acc.id -> value
+                  }.toMap
 
-            case e: SparkListenerApplicationStart =>
-              appId.set(e.appId.get)
-              appAttemptId.set(e.appAttemptId.getOrElse(""))
+              case e: SparkListenerApplicationStart =>
+                appId.set(e.appId.get)
+                appAttemptId.set(e.appAttemptId.getOrElse(""))
 
-            case e: SparkListenerSQLExecutionStart =>
-              val sqlProperty = SQLProperties()
-              sqlProperty.startTime = e.time
-              sqlProperty.sql = e.description
-              sqlProperties.get += e.executionId -> sqlProperty
+              case e: SparkListenerSQLExecutionStart =>
+                val sqlProperty = SQLProperties()
+                sqlProperty.startTime = e.time
+                sqlProperty.sql = e.description
+                sqlProperties.get += e.executionId -> sqlProperty
 
-            case e: SparkListenerSQLExecutionEnd =>
-              sqlProperty(e.executionId).endTime = e.time
+              case e: SparkListenerSQLExecutionEnd =>
+                sqlProperty(e.executionId).endTime = e.time
 
-            case _ =>
-          }
-          Seq((json, event))
+              case _ =>
+            }
+            Seq((json, event))
 
-        } catch {
-          case _ => Seq()
+          } catch {
+            case _ => Seq()
         })
 
       catchAnalyzeException {
@@ -286,7 +293,8 @@ object AnalyzeBase {
   }
 }
 
-case class SQLProperties(var executionId: Long = 0,
-                         var sql: String = "",
-                         var startTime: Long = 0,
-                         var endTime: Long = 0)
+case class SQLProperties(
+    var executionId: Long = 0,
+    var sql: String = "",
+    var startTime: Long = 0,
+    var endTime: Long = 0)

@@ -15,21 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.loganalyze
+package org.apache.spark.rpc
 
-/**
- *
- */
-object CatLog extends AnalyzeBase {
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.Utils
+import org.apache.spark.{SecurityManager, SparkConf}
+
+object SimpleRPCServer extends Logging {
+
+  val SERVER_NAME = "OfflineServer"
+  val SQL_PARSER_ENDPOINT_NAME = "SQLParser"
+
+  var host = Utils.localHostName()
+  var port = 5188
+
   def main(args: Array[String]): Unit = {
-    localAnalyze(
-      filePath = "/Users/wakun/Downloads/application_1630907351152_49778_dd046396-3f5b-40a4-adcd-c0303781610f.lz4",
-      filteredEventTypes = Set.empty[String],
-      func = {
-        case (json, _) =>
-          if(json.contains("7598245"))
-            println(json)
-      }
-    )
+    val conf = new SparkConf
+    val securityMgr = new SecurityManager(conf)
+    val rpcEnv = RpcEnv.create(SERVER_NAME, host, port, conf, securityMgr)
+    val sqlParserEndpoint = rpcEnv.setupEndpoint(SQL_PARSER_ENDPOINT_NAME, new SqlParserEndPoint(rpcEnv))
+    logInfo(s"sqlParserEndpoint has been start. $sqlParserEndpoint")
+    rpcEnv.awaitTermination()
   }
+
 }

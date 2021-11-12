@@ -17,7 +17,8 @@
 
 package org.apache.spark.loganalyze.cost
 
-import org.apache.spark.loganalyze.AnalyzeBase
+import org.apache.spark.loganalyze._
+import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
@@ -32,50 +33,118 @@ import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
  */
 object JoinCostAnalyze extends AnalyzeBase {
 
+  val sqlDuration = 30
+
   def main(args: Array[String]): Unit = {
     sparkAnalyze(
-      //      filePath = "/Users/wakun/Downloads/application_1627443888187_3898_1_b0f538a0-3038-4fa6-aa62-d97e8f57b5fb.lz4",
       appName = "JoinCostAnalyze",
       filteredEventTypes = commonFilteredEventTypes,
-      func = {
-        case (_, e: SparkListenerSQLAdaptiveExecutionUpdate)
-          if e.sparkPlanInfo.simpleString == "AdaptiveSparkPlan isFinalPlan=true"
-            && sqlProperty(e.executionId).endTime - sqlProperty(e.executionId).startTime > 30 * 60 * 60 =>
-          val planCost = planToPlanCost(e.sparkPlanInfo)
-          val simplify = simplifyPlanCost(planCost)
-          logDebug(
-            s"""planCost:
-               |${planCost.treeString}
-               |
-               |Simplify planCost:
-               |${simplify.treeString}
-               |""".stripMargin)
+      func
+    )
+  }
 
-          simplify collect { case parent if parent.name == "SortMergeJoin" =>
-            val childPlanOpt = parent.collectFirst {
-              case child
-                if child != parent && child.name == "SortMergeJoin"
-                  && parent.priority < child.priority && child.priority < 10000 =>
-                child
-            }
-            if (childPlanOpt.isDefined) {
-              println(
-                s"""__BLOCKSTART__URL
-                   |${viewPointURL(e.executionId)}
-                   |__BLOCKEND__URL
-                   |__BLOCKSTART__SQL
-                   |${sql(e.executionId)}
-                   |__BLOCKEND__SQL
-                   |__BLOCKSTART__PLANCOST
-                   |${planCost.treeString}
-                   |__BLOCKEND_PLANCOST
-                   |__BLOCKSTART__PARENT
-                   |${parent.treeString}
-                   |__BLOCKEND__PARENT
-                   |""".stripMargin)
-            }
-          }
-      })
+  val func: PartialFunction[(String, SparkListenerEvent), Unit] = {
+    case (_, e: SparkListenerSQLAdaptiveExecutionUpdate)
+      if e.sparkPlanInfo.simpleString == "AdaptiveSparkPlan isFinalPlan=true"
+        && sqlProperty(e.executionId).endTime - sqlProperty(e.executionId).startTime > sqlDuration =>
+      val planCost = planToPlanCost(e.sparkPlanInfo)
+      val simplify = simplifyPlanCost(planCost)
+      logInfo(
+        s"""planCost:
+           |${planCost.treeString}
+           |
+           |Simplify planCost:
+           |${simplify.treeString}
+           |""".stripMargin)
+
+      simplify.collect {
+        case join if join.name.endsWith("Join") && join.simpleString.contains("Inner") && join.children.size == 2 &&
+          (
+            (join.children(0).rows > 1000 * 1000 * 100 && isSmallTable(join.children(1))) ||
+              (join.children(1).rows > 1000 * 1000 * 100 && isSmallTable(join.children(0)))
+            ) &&
+          join.rows == join.children.map(_.rows).min
+        =>
+          println(
+            s"""Join Row: ${join.children.map(_.rows)} --> ${join.rows}
+               |__BLOCKSTART__URL
+               |${viewPointURL(e.executionId)}
+               |__BLOCKEND__URL
+               |__BLOCKSTART__SQL
+               |${sql(e.executionId)}
+               |__BLOCKEND__SQL
+               |__BLOCKSTART__PLANCOST
+               |${planCost.treeString}
+               |__BLOCKEND_PLANCOST
+               |__BLOCKSTART__SMALLCHILD
+               |${join.treeString}
+               |__BLOCKEND__SMALLCHILD
+               |""".stripMargin)
+          join
+      }
+
+
+    /*val joins = planCost.collect { case input if input.name.endsWith("Join") => input }
+    var i = 0
+    while (joins.size > 5 && i < joins.size - 1) {
+      val p1 = joins(i)
+      val p2 = joins(i + 1)
+      if (p2.rows > 10000L * 10000L * 1000L && p1.rows * 2 < p2.rows) {
+        println(
+          s"""__BLOCKSTART__URL
+             |${viewPointURL(e.executionId)}
+             |__BLOCKEND__URL
+             |__BLOCKSTART__SQL
+             |${sql(e.executionId)}
+             |__BLOCKEND__SQL
+             |__BLOCKSTART__PLANCOST
+             |${planCost.treeString}
+             |__BLOCKEND_PLANCOST
+             |__BLOCKSTART__SMALLCHILD
+             |${p1.treeString}
+             |__BLOCKEND__SMALLCHILD
+             |__BLOCKSTART__LARGECHILD
+             |${p2.treeString}
+             |__BLOCKEND__LARGECHILD
+             |""".stripMargin)
+      }
+      i = i + 1
+    }*/
+    /*def sortMergeChildren(input: PlanCost): Option[(PlanCost, PlanCost)] = {
+      input collect {
+        case parent: PlanCost
+          if parent.name == "SortMergeJoin" && parent.children(0).rows > parent.children(1).rows * 1.5 =>
+          val Seq(c1, c2) = parent.children
+          (c1, c2)
+
+        case parent: PlanCost
+          if parent.name == "SortMergeJoin" && parent.children(1).rows > parent.children(0).rows * 1.5 =>
+          val Seq(c1, c2) = parent.children
+          (c2, c1)
+      } headOption
+    }
+
+    sortMergeChildren(simplify) map { case (largeChild, smallChild) =>
+      sortMergeChildren(largeChild) map { case (largeChild2, smallChild2) =>
+        println(
+          s"""__BLOCKSTART__URL
+             |${viewPointURL(e.executionId)}
+             |__BLOCKEND__URL
+             |__BLOCKSTART__SQL
+             |${sql(e.executionId)}
+             |__BLOCKEND__SQL
+             |__BLOCKSTART__PLANCOST
+             |${planCost.treeString}
+             |__BLOCKEND_PLANCOST
+             |__BLOCKSTART__SMALLCHILD
+             |${smallChild.treeString}
+             |__BLOCKEND__SMALLCHILD
+             |__BLOCKSTART__LARGECHILD
+             |${largeChild.treeString}
+             |__BLOCKEND__LARGECHILD
+             |""".stripMargin)
+      }
+    }*/
   }
 
   def extractTableScan(name: String): TableIdentifier = {
@@ -148,6 +217,23 @@ object JoinCostAnalyze extends AnalyzeBase {
       //.copy(rows = planCost.rows)
     } else {
       planCost.copy(children = children)
+    }
+  }
+
+  def isSmallTable(planCost: PlanCost): Boolean = {
+    planCost.children.size match {
+      case 0 =>
+        planCost.rows < 100000
+
+      case 1 =>
+        if (planCost.rows < 100000 && planCost.children(0).rows > 1000 * 1000) {
+          false
+        } else {
+          isSmallTable(planCost.children(0))
+        }
+
+      case _ =>
+        false
     }
   }
 }

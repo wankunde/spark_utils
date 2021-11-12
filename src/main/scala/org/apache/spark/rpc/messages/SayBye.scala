@@ -17,6 +17,4 @@
 
 package org.apache.spark.rpc.messages
 
-class SayBye {
-
-}
+case class SayBye(msg: String)

@@ -35,7 +35,7 @@ case class PlanCost(name: String,
   }
 
   def priority: Double =
-    if (children.size == 0 && children.exists(_.rows == rows)) {
+    if (children.size == 0 || children.exists(_.rows == rows)) {
       // 没有子节点进行过滤，或者没有起到过滤效果（存在子节点的记录数 == 结果记录数）
       10000
     } else {

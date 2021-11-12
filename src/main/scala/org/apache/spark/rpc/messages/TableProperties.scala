@@ -17,4 +17,4 @@
 
 package org.apache.spark.rpc.messages
 
-case object TableProperties
+case class TableProperties(db: String, table: String, properties: Map[String, String])

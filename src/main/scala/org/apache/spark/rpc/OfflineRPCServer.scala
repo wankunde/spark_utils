@@ -17,10 +17,11 @@
 
 package org.apache.spark.rpc
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 import org.apache.spark.{SecurityManager, SparkConf}
 
-object OfflineServer {
+object OfflineRPCServer extends Logging {
 
   val SERVER_NAME = "OfflineServer"
   val SQL_PARSER_ENDPOINT_NAME = "SQLParser"
@@ -33,6 +34,7 @@ object OfflineServer {
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create(SERVER_NAME, host, port, conf, securityMgr)
     val sqlParserEndpoint = rpcEnv.setupEndpoint(SQL_PARSER_ENDPOINT_NAME, new SqlParserEndPoint(rpcEnv))
+    logInfo(s"sqlParserEndpoint has been start. $sqlParserEndpoint")
     rpcEnv.awaitTermination()
   }
 

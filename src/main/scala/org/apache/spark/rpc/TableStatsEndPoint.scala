@@ -15,21 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.loganalyze
+package org.apache.spark.rpc
 
-/**
- *
- */
-object CatLog extends AnalyzeBase {
-  def main(args: Array[String]): Unit = {
-    localAnalyze(
-      filePath = "/Users/wakun/Downloads/application_1630907351152_49778_dd046396-3f5b-40a4-adcd-c0303781610f.lz4",
-      filteredEventTypes = Set.empty[String],
-      func = {
-        case (json, _) =>
-          if(json.contains("7598245"))
-            println(json)
-      }
-    )
+import org.apache.spark.internal.Logging
+import org.apache.spark.rpc.messages.{SayBye, SayHi, TableProperties}
+
+class TableStatsEndPoint(override val rpcEnv: RpcEnv) extends RpcEndpoint with Logging {
+
+  override def onStart(): Unit = {
+    logInfo("start TableStatsEndPoint")
+  }
+
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case TableProperties(db, table, properties) => {
+      context.reply(s"hi")
+    }
   }
 }

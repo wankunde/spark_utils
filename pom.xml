@@ -24,7 +24,7 @@
 
   <repositories>
     <repository>
-      <releases />
+      <releases/>
       <snapshots>
         <enabled>false</enabled>
       </snapshots>
@@ -60,6 +60,12 @@
       <artifactId>h2</artifactId>
       <version>1.4.197</version>
       <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-email</artifactId>
+      <version>1.5</version>
     </dependency>
   </dependencies>
 
@@ -171,7 +177,13 @@
             <configuration>
               <artifactSet>
                 <includes>
+                  <include>log4j:log4j</include>
+                  <include>org.scala-lang:scala-library</include>
+                  <include>org.scala-lang:scala-reflect</include>
                   <include>mysql:mysql-connector-java</include>
+                  <!-- 如果需要发送邮件，要添加这两个包 -->
+                  <!--                  <include>com.sun.mail:javax.mail</include>-->
+                  <!--                  <include>org.apache.commons:commons-email</include>-->
                 </includes>
               </artifactSet>
             </configuration>

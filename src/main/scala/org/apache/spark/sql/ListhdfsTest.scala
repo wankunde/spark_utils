@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
-class ListhdfsTest {
+import org.apache.spark.internal.Logging
+
+object ListhdfsTest extends Logging {
 
 }

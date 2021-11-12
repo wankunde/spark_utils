@@ -24,7 +24,7 @@ import org.apache.spark.rpc.messages.SayHi
 import org.apache.spark.util.Utils
 import org.apache.spark.{SecurityManager, SparkConf}
 
-object OfflineRPCClient {
+object SimpleRPCClient {
 
   val SERVER_NAME = "OfflineServer"
   val SQL_PARSER_ENDPOINT_NAME = "SQLParser"

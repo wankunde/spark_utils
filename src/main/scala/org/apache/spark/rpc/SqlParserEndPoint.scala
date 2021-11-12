@@ -17,7 +17,10 @@
 
 package org.apache.spark.rpc
 
-class HelloEndpoint(override val rpcEnv: RpcEnv) extends RpcEndpoint {
+import org.apache.spark.rpc.messages.{SayBye, SayHi}
+
+// TODO: use IsolatedRpcEndpoint instead
+class SqlParserEndPoint(override val rpcEnv: RpcEnv) extends RpcEndpoint {
   override def onStart(): Unit = {
     println("start hello endpoint")
   }
@@ -37,7 +40,3 @@ class HelloEndpoint(override val rpcEnv: RpcEnv) extends RpcEndpoint {
     println("stop hello endpoint")
   }
 }
-
-case class SayHi(msg: String)
-
-case class SayBye(msg: String)
