@@ -15,25 +15,8 @@
  * limitations under the License.
  */
 
-package org.apache.spark.utils
+package org.apache.spark.rpc.messages
 
-import org.apache.spark.utils.JDBCUtils.withConnection
-import org.scalatest.BeforeAndAfter
-import org.scalatest.funsuite.AnyFunSuite
-
-class JDBCUtilsSuite extends AnyFunSuite with BeforeAndAfter {
-
-  test("sink data to jdbc table") {
-    withConnection("h2") { conn =>
-      conn.prepareStatement(
-        "create table people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
-      conn.prepareStatement("insert into people values ('fred', 1)").executeUpdate()
-      conn.prepareStatement("insert into people values ('mary', 2)").executeUpdate()
-      val rs = conn.prepareStatement("select count(1) from people").executeQuery()
-      if (rs.next()) {
-        assert(rs.getInt(1) == 2)
-      }
-    }
-  }
+class SayBye {
 
 }
