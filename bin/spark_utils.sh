@@ -33,8 +33,10 @@ function check_environment() {
   # SPARK_HOME env variable overrides hadoop in the path
   SPARK_HOME=${SPARK_HOME:-$SPARK_DIR}
   if [ "$SPARK_HOME" == "" ]; then
-    echo "ERROR: Cannot find spark installation: \$SPARK_HOME must be set or spark-submit must be in the path";
-    exit 4;
+    # export default SPARK_HOME
+    export SPARK_HOME=/mnt/b_carmel/wakun/spark_releases/CARMEL-4978/spark
+    #echo "ERROR: Cannot find spark installation: \$SPARK_HOME must be set or spark-submit must be in the path";
+    #exit 4;
   else
     export SPARK_HOME
   fi
@@ -96,11 +98,10 @@ elif [ "${CMD}" == "tpcds" ]; then
      --conf spark.yarn.queue=hdmi-staging \
     ${BASEDIR}/libs/spark_utils-1.0.jar
 elif [ "${CMD}" == "collect_result" ]; then
-  applicationId=$1
-  echo "Run command: spark_utils.sh applicationId ${applicationId}"
-  yarn logs -applicationId $applicationId -log_files_pattern stdout | grep -vE 'End of LogType:stdout|^$' | grep -v "\*\*\*" > /tmp/AnalyzeBase.log
+  echo "Run command: spark_utils.sh collect_result"
+  rm -rf /tmp/spark_utils_stdout
   export CLASSPATH=$(echo ${SPARK_HOME}/jars/*.jar | tr ' ' ':'):${BASEDIR}/libs/spark_utils-1.0.jar:${CLASSPATH}
-  exec java org.apache.spark.loganalyze.UniqQuery > analyze.log
+  exec java -cp spark_utils-1.0/libs/spark_utils-1.0.jar org.apache.spark.loganalyze.CollectApplicationOutput
 else
   print_usage
 fi

@@ -25,17 +25,14 @@ import scala.reflect.io.{Directory, Path}
 import org.apache.spark.utils.LocalUtils._
 
 /**
- * java -cp spark_utils-1.0/libs/spark_utils-1.0.jar org.apache.spark.loganalyze.CollectApplicationOutput mx.vip.ebay.com DL-eBay-CCOE-BTD@ebay.com wakun@ebay.com
+ * spark_utils.sh collect_result
  */
 object CollectApplicationOutput {
 
   def main(args: Array[String]): Unit = {
-//    val smtpHost = args(0)
-//    val from = args(1)
-//    val to = args(2)
-
     val outputPath = "/tmp/spark_utils_stdout"
     val appId = fromFile(SPARK_APPLICATION_ID_PATH).mkString
+    println(s"appId: ${appId}")
     val outputDir = Directory(Path(outputPath))
     outputDir.delete()
     val cmd =
@@ -44,7 +41,6 @@ object CollectApplicationOutput {
     runSystemCommand {
       Runtime.getRuntime().exec(cmd, null, new File("/tmp"))
     }
-    println("Sending email")
 
     val outputs =
       outputDir.deepFiles
@@ -56,7 +52,6 @@ object CollectApplicationOutput {
             .filterNot(_.contains("************************"))
             .filterNot(_.contains("End of LogType:stdout"))
         }.mkString("\n")
-//    sendEmail(smtpHost, from, to, "Schedule Delay Detector", outputs)
     println(outputs)
     println("End")
   }

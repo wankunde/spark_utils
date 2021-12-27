@@ -21,6 +21,14 @@ import org.apache.spark.Success
 import org.apache.spark.loganalyze.AnalyzeBase.appId
 import org.apache.spark.scheduler.SparkListenerTaskEnd
 
+/**
+ * 修改 AnalyzeBase 开启Application扫描过滤条件 .filter(p => p.getPath.toString.contains("1636603355091_20415"))
+ * rm -rf spark_utils-1.0-bin.tar.gz spark_utils-1.0
+ * rz
+ * tar -zxvf spark_utils-1.0-bin.tar.gz
+ * spark_utils-1.0/bin/spark_utils.sh custom_class org.apache.spark.loganalyze.ScheduleDelayFilter
+ * spark_utils-1.0/bin/spark_utils.sh collect_result
+ */
 object ScheduleDelayFilter extends AnalyzeBase {
 
   def main(args: Array[String]): Unit = {
@@ -67,13 +75,11 @@ object ScheduleDelayFilter extends AnalyzeBase {
             (executorDeserializeTime + executorRunTime + resultSerializationTime)
           val url =
             s"$viewpointUrl/${appId.get()}/stages/stage/?id=${stageId}&attempt=${stageAttemptId}"
-          if (launchTime > 1636612551000L && scheduleDelayTime > 4 * 60 * 1000) {
-            println(
-              s"ViewPoint URL: ${url}, TaskId: ${taskInfo.taskId}, " +
-                s"executorId: ${taskInfo.executorId}, Host: ${taskInfo.host}, " +
-                s"scheduleDelayTime: ${scheduleDelayTime}, jvmGCTime =${jvmGCTime}, resultSize = ${taskMetrics.resultSize}")
+          if (scheduleDelayTime > 4 * 60 * 1000) {
+            println(s"ViewPoint URL: ${url}, TaskId: ${taskInfo.taskId}, " +
+              s"executorId: ${taskInfo.executorId}, Host: ${taskInfo.host}, " +
+              s"scheduleDelayTime: ${scheduleDelayTime}, jvmGCTime =${jvmGCTime}, resultSize = ${taskMetrics.resultSize}")
           }
-      },
-      logHours = 20)
+      })
   }
 }

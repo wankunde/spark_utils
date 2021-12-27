@@ -52,11 +52,12 @@ import org.apache.spark.utils.LocalUtils.SPARK_APPLICATION_ID_PATH
 
 trait AnalyzeBase extends Logging with Serializable {
 
+  var logDays: Int = 2 // 默认搜索线上7天的任务日志
+
   def sparkAnalyze(
       appName: String,
       filteredEventTypes: Set[String],
-      func: PartialFunction[(String, SparkListenerEvent), Unit],
-      logHours: Int = 7 * 24 // 默认搜索线上7天的任务日志
+      func: PartialFunction[(String, SparkListenerEvent), Unit]
   ): Unit = {
     val spark = SparkSession.builder
       .appName(appName)
@@ -74,14 +75,31 @@ trait AnalyzeBase extends Logging with Serializable {
 
     val now = System.currentTimeMillis()
 
-    Range(0, logHours).foreach(hourBefore => {
+    val appNames = Set(
+      "1639134104641_3343",
+      "1639134104641_3342",
+      "1639134104641_3341",
+      "1639134104641_3340",
+      "1639134104641_3339",
+      "1639134104641_3338",
+      "1639134104641_3337",
+      "1639134104641_3336",
+      "1639134104641_3335",
+      "1639134104641_3334",
+      "1639134104641_3333",
+      "1639134104641_3331",
+      "1639134104641_3329",
+      "1639134104641_3328",
+      "1639134104641_3327",
+    )
+    Range(0, logDays).foreach(dayBefore => {
       val logFiles = util
         .listFilesSorted(fs, new Path(logDir), "application_", ".inprogress")
         .filter(fileStatus => {
           val mtime = fileStatus.getModificationTime
-          mtime > (now - 3600000 * (hourBefore + 1)) && mtime < now - 3600000 * hourBefore
+          mtime > (now - 86400000 * (dayBefore + 1)) && mtime < now - 86400000 * dayBefore
         })
-        .filter(p => p.getPath.toString.contains("1636603355091_0597"))
+        .filter(p => appNames.find(p.getPath.toString.contains(_)).isDefined)
         .map(_.getPath.toString)
 
       logInfo(s"Try to analyze ${logFiles.size} log files in ${logDir}")
@@ -166,8 +184,7 @@ trait AnalyzeBase extends Logging with Serializable {
   def localAnalyze(
       filePath: String,
       filteredEventTypes: Set[String],
-      func: PartialFunction[(String, SparkListenerEvent), Unit],
-      logHours: Int = -1): Unit = {
+      func: PartialFunction[(String, SparkListenerEvent), Unit]): Unit = {
     val path = new Path(filePath)
     val fs = path.getFileSystem(new Configuration())
 
