@@ -35,7 +35,7 @@ object PartitionRecombinationPattern extends AnalyzeBase {
       appName = "PartitionRecombination Pattern Search",
       filteredEventTypes = commonFilteredEventTypes,
       func = {
-        case (_, e: SparkListenerSQLAdaptiveExecutionUpdate) =>
+        case (_, e: SparkListenerSQLAdaptiveExecutionUpdate, printer) =>
           transformPlanInfo(e.sparkPlanInfo, planInfo => {
             val nodeString = planInfo.simpleString
             if (nodeString.startsWith("SortMergeJoin")) {
@@ -43,7 +43,7 @@ object PartitionRecombinationPattern extends AnalyzeBase {
               val (left, right) = (planInfo.children(0), planInfo.children(1))
               if ((nodeString.contains("LeftOuter") && left.nodeName == "PartitionRecombination") ||
                 (nodeString.contains("RightOuter") && right.nodeName == "PartitionRecombination")) {
-                println(
+                printer(
                   s"""${sql(e.executionId)}
                      |${viewPointURL(e.executionId)}
                      |""".stripMargin)

@@ -35,18 +35,9 @@ import org.apache.spark.deploy.history.EventLogFileReader
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.EVENT_LOG_DIR
 import org.apache.spark.loganalyze.AnalyzeBase._
-import org.apache.spark.scheduler.{
-  AccumulableInfo,
-  SparkListenerApplicationStart,
-  SparkListenerEvent,
-  SparkListenerStageCompleted
-}
+import org.apache.spark.scheduler.{AccumulableInfo, SparkListenerApplicationStart, SparkListenerEvent, SparkListenerJobStart, SparkListenerStageCompleted}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.ui.{
-  SparkListenerDriverAccumUpdates,
-  SparkListenerSQLExecutionEnd,
-  SparkListenerSQLExecutionStart
-}
+import org.apache.spark.sql.execution.ui.{SparkListenerDriverAccumUpdates, SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.util.{JsonProtocol, Utils}
 import org.apache.spark.utils.LocalUtils.SPARK_APPLICATION_ID_PATH
 
@@ -57,7 +48,7 @@ trait AnalyzeBase extends Logging with Serializable {
   def sparkAnalyze(
       appName: String,
       filteredEventTypes: Set[String],
-      func: PartialFunction[(String, SparkListenerEvent), Unit]
+      func: PartialFunction[(String, SparkListenerEvent, String => Unit), Unit]
   ): Unit = {
     val spark = SparkSession.builder
       .appName(appName)
@@ -75,23 +66,6 @@ trait AnalyzeBase extends Logging with Serializable {
 
     val now = System.currentTimeMillis()
 
-    val appNames = Set(
-      "1639134104641_3343",
-      "1639134104641_3342",
-      "1639134104641_3341",
-      "1639134104641_3340",
-      "1639134104641_3339",
-      "1639134104641_3338",
-      "1639134104641_3337",
-      "1639134104641_3336",
-      "1639134104641_3335",
-      "1639134104641_3334",
-      "1639134104641_3333",
-      "1639134104641_3331",
-      "1639134104641_3329",
-      "1639134104641_3328",
-      "1639134104641_3327",
-    )
     Range(0, logDays).foreach(dayBefore => {
       val logFiles = util
         .listFilesSorted(fs, new Path(logDir), "application_", ".inprogress")
@@ -99,7 +73,6 @@ trait AnalyzeBase extends Logging with Serializable {
           val mtime = fileStatus.getModificationTime
           mtime > (now - 86400000 * (dayBefore + 1)) && mtime < now - 86400000 * dayBefore
         })
-        .filter(p => appNames.find(p.getPath.toString.contains(_)).isDefined)
         .map(_.getPath.toString)
 
       logInfo(s"Try to analyze ${logFiles.size} log files in ${logDir}")
@@ -150,6 +123,13 @@ trait AnalyzeBase extends Logging with Serializable {
                       case e: SparkListenerSQLExecutionEnd =>
                         sqlProperty(e.executionId).endTime = e.time
 
+                      case SparkListenerJobStart(_, _, _, properties) =>
+                        val executionId = properties.getProperty("spark.sql.execution.id")
+                        val queryId = properties.getProperty("spark.jobGroup.id")
+                        if(executionId!=null && queryId !=null) {
+                          sqlProperty(executionId.toLong).queryId = queryId
+                        }
+
                       case _ =>
                     }
                     jsonAndEvent += Tuple2(json, event: SparkListenerEvent)
@@ -158,6 +138,13 @@ trait AnalyzeBase extends Logging with Serializable {
                   }
               }
 
+              val logSet = mutable.Set[String]()
+              val printer: String => Unit = (msg: String) => {
+                if (!logSet.contains(msg)) {
+                  logSet += msg
+                  println(msg)
+                }
+              }
               catchAnalyzeException {
                 jsonAndEvent.collect {
                   case (_, e: SparkListenerSQLExecutionStart) =>
@@ -166,7 +153,7 @@ trait AnalyzeBase extends Logging with Serializable {
                   case (_, e: SparkListenerSQLExecutionEnd) =>
                     executionIdOpt.set(0L)
 
-                  case (json, event) if func.isDefinedAt(json, event) => func(json, event)
+                  case (json, event) if func.isDefinedAt(json, event, printer) => func(json, event, printer)
                 }
               }
             } catch {
@@ -184,7 +171,7 @@ trait AnalyzeBase extends Logging with Serializable {
   def localAnalyze(
       filePath: String,
       filteredEventTypes: Set[String],
-      func: PartialFunction[(String, SparkListenerEvent), Unit]): Unit = {
+      func: PartialFunction[(String, SparkListenerEvent, String => Unit), Unit]): Unit = {
     val path = new Path(filePath)
     val fs = path.getFileSystem(new Configuration())
 
@@ -193,6 +180,13 @@ trait AnalyzeBase extends Logging with Serializable {
       System.exit(-1)
     }
     println(s"========================================CONTENT START FOR ${path}")
+    val logSet = mutable.Set[String]()
+    val printer: String => Unit = (msg: String) => {
+      if (!logSet.contains(msg)) {
+        logSet += msg
+        println(msg)
+      }
+    }
     Utils.tryWithResource(EventLogFileReader.openEventLog(path, fs)) { in =>
       val lines =
         Source
@@ -239,6 +233,13 @@ trait AnalyzeBase extends Logging with Serializable {
               case e: SparkListenerSQLExecutionEnd =>
                 sqlProperty(e.executionId).endTime = e.time
 
+              case SparkListenerJobStart(_, _, _, properties) =>
+                val executionId = properties.getProperty("spark.sql.execution.id")
+                val queryId = properties.getProperty("spark.jobGroup.id")
+                if(executionId!=null && queryId !=null) {
+                  sqlProperty(executionId.toLong).queryId = queryId
+                }
+
               case _ =>
             }
             Seq((json, event))
@@ -255,7 +256,7 @@ trait AnalyzeBase extends Logging with Serializable {
           case (_, e: SparkListenerSQLExecutionEnd) =>
             executionIdOpt.set(0L)
 
-          case (json, event) if func.isDefinedAt(json, event) => func(json, event)
+          case (json, event) if func.isDefinedAt(json, event, printer) => func(json, event, printer)
         }
       }
       sqlProperties.remove()
@@ -282,7 +283,7 @@ trait AnalyzeBase extends Logging with Serializable {
     sqlProperty(executionId).sql
 
   def viewPointURL(executionId: Long = executionIdOpt.get()): String =
-    s"$viewpointUrl/${appId.get()}/${appAttemptId.get()}/SQL/execution/?id=$executionId"
+    s"$viewpointUrl/${appId.get()}/${appAttemptId.get()}SQL/execution/?id=$executionId"
 
   def metric(accumulatorId: Long): Long =
     accumUpdates.get.getOrElse(accumulatorId, -1)
@@ -312,6 +313,7 @@ object AnalyzeBase {
 
 case class SQLProperties(
     var executionId: Long = 0,
+    var queryId: String = "",
     var sql: String = "",
     var startTime: Long = 0,
     var endTime: Long = 0)

@@ -43,8 +43,8 @@ object JoinCostAnalyze extends AnalyzeBase {
     )
   }
 
-  val func: PartialFunction[(String, SparkListenerEvent), Unit] = {
-    case (_, e: SparkListenerSQLAdaptiveExecutionUpdate)
+  val func: PartialFunction[(String, SparkListenerEvent, String => Unit), Unit] = {
+    case (_, e: SparkListenerSQLAdaptiveExecutionUpdate, _)
       if e.sparkPlanInfo.simpleString == "AdaptiveSparkPlan isFinalPlan=true"
         && sqlProperty(e.executionId).endTime - sqlProperty(e.executionId).startTime > sqlDuration =>
       val planCost = planToPlanCost(e.sparkPlanInfo)

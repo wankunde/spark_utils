@@ -37,10 +37,10 @@ object DppPattern extends AnalyzeBase {
         "/Users/wakun/Downloads/application_1639134104641_3331_43101e28-7da4-4d22-9637-02522f35f6ab.lz4.inprogress",
       filteredEventTypes = commonFilteredEventTypes,
       func = {
-        case (_, e: SparkListenerSQLAdaptiveExecutionUpdate) =>
+        case (_, e: SparkListenerSQLAdaptiveExecutionUpdate, printer) =>
           transformPlanInfo(e.sparkPlanInfo, plan => {
             if (plan.nodeName == "SubqueryBroadcast" && plan.simpleString.startsWith("SubqueryBroadcast dynamicpruning")) {
-              println(s"VIEWPOINT: ${viewPointURL(e.executionId)}")
+              printer(s"VIEWPOINT: ${viewPointURL(e.executionId)}")
             }
           })
       })

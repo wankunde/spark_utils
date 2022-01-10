@@ -49,8 +49,15 @@ object CollectApplicationOutput {
           fromFile(_)
             .getLines()
             .filter(_.trim.length > 0)
-            .filterNot(_.contains("************************"))
-            .filterNot(_.contains("End of LogType:stdout"))
+            .filterNot(line =>
+              line.startsWith("************************") ||
+                line.startsWith("End of LogType:stdout") ||
+                line.startsWith("LogAggregationType: ") ||
+                line.startsWith("LogType:stdout") ||
+                line.startsWith("LogLastModifiedTime") ||
+                line.startsWith("LogLength:") ||
+                line.startsWith("LogContents:")
+            )
         }.mkString("\n")
     println(outputs)
     println("End")

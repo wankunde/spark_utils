@@ -28,12 +28,12 @@ object LocalLogReader extends AnalyzeBase {
       filteredEventTypes = commonFilteredEventTypes,
       func = {
         // if e.sparkPlanInfo.simpleString == "AdaptiveSparkPlan isFinalPlan=true"
-        case (json, e: SparkListenerSQLAdaptiveExecutionUpdate) =>
+        case (json, e: SparkListenerSQLAdaptiveExecutionUpdate, printer) =>
           transformPlanInfo(e.sparkPlanInfo, plan => {
             if (plan.nodeName == "SortMergeJoin") {
               matchJoinPattern(firstExchange(plan.children(0)), firstExchange(plan.children(1))) match {
                 case Some((left, right)) =>
-                  println(
+                  printer(
                     s"""__BLOCKSTART__URL
                        |${viewPointURL()}
                        |__BLOCKEND__URL

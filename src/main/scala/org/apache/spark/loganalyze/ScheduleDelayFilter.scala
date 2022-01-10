@@ -40,15 +40,10 @@ object ScheduleDelayFilter extends AnalyzeBase {
       filteredEventTypes = commonFilteredEventTypes ++ Set("SparkListenerTaskEnd"),
       func = {
         case (
-            _,
-            SparkListenerTaskEnd(
-              stageId,
-              stageAttemptId,
-              _,
-              Success,
-              taskInfo,
-              _,
-              taskMetrics)) =>
+          _,
+          SparkListenerTaskEnd(stageId, stageAttemptId, _, Success, taskInfo, _, taskMetrics),
+          printer
+          ) =>
           val (
             launchTime,
             gettingResultTime,
@@ -76,7 +71,7 @@ object ScheduleDelayFilter extends AnalyzeBase {
           val url =
             s"$viewpointUrl/${appId.get()}/stages/stage/?id=${stageId}&attempt=${stageAttemptId}"
           if (scheduleDelayTime > 4 * 60 * 1000) {
-            println(s"ViewPoint URL: ${url}, TaskId: ${taskInfo.taskId}, " +
+            printer(s"ViewPoint URL: ${url}, TaskId: ${taskInfo.taskId}, " +
               s"executorId: ${taskInfo.executorId}, Host: ${taskInfo.host}, " +
               s"scheduleDelayTime: ${scheduleDelayTime}, jvmGCTime =${jvmGCTime}, resultSize = ${taskMetrics.resultSize}")
           }

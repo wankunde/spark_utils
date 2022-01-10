@@ -14,12 +14,14 @@ package object loganalyze extends Logging {
   val commonFilteredEventTypes = Set(
     // events for metrics
     "SparkListenerStageCompleted",
+    "SparkListenerJobStart",
     "org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates",
     //appId and appAttemptId
     "SparkListenerApplicationStart",
     // sql description and duration
     "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart",
     "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd",
+
     // sql physical plan
     "org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate")
 

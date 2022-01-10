@@ -33,12 +33,12 @@ object SearchJoinPattern extends AnalyzeBase {
       appName = "Search Join Pattern",
       filteredEventTypes = commonFilteredEventTypes,
       func = {
-        case (_, e: SparkListenerSQLAdaptiveExecutionUpdate) =>
+        case (_, e: SparkListenerSQLAdaptiveExecutionUpdate, printer) =>
           transformPlanInfo(e.sparkPlanInfo, plan => {
             if (plan.nodeName == "SortMergeJoin") {
               matchJoinPattern(firstExchange(plan.children(0)), firstExchange(plan.children(1))) match {
                 case Some((left, right)) =>
-                  println(
+                  printer(
                     s"""__BLOCKSTART__URL
                        |${viewPointURL(e.executionId)}
                        |__BLOCKEND__URL
