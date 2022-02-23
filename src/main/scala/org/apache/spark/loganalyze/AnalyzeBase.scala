@@ -43,7 +43,7 @@ import org.apache.spark.utils.LocalUtils.SPARK_APPLICATION_ID_PATH
 
 trait AnalyzeBase extends Logging with Serializable {
 
-  var logDays: Int = 2 // 默认搜索线上7天的任务日志
+  var logDays: Int = 7 // 默认搜索线上7天的任务日志
 
   def sparkAnalyze(
       appName: String,

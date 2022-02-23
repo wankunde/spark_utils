@@ -17,7 +17,6 @@
 
 package org.apache.spark.loganalyze
 
-import org.apache.spark.loganalyze.cost.JoinCostAnalyze.sqlProperty
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 
 /**
